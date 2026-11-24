@@ -1,0 +1,276 @@
+<Window x:Class="IloWidget.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:c="clr-namespace:IloWidget.Controls"
+        xmlns:m="clr-namespace:IloWidget.Models"
+        Title="iLO Widget" Width="330" SizeToContent="Height"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize" ShowInTaskbar="False" UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display">
+
+    <Window.ContextMenu>
+        <ContextMenu Style="{StaticResource HudContextMenu}">
+            <MenuItem Header="REFRESH" Style="{StaticResource HudMenuItem}" Click="Refresh_Click" />
+            <MenuItem x:Name="ConsoleItem" Header="REMOTE CONSOLE" Style="{StaticResource HudMenuItem}" Click="OpenConsole_Click" />
+            <MenuItem Header="SETTINGS" Style="{StaticResource HudMenuItem}" Click="OpenSettings_Click" />
+            <MenuItem Header="DISPLAY" Style="{StaticResource HudMenuItem}" Click="OpenDisplay_Click" />
+            <Separator Style="{StaticResource HudSeparator}" />
+            <MenuItem x:Name="TopmostItem" Header="ALWAYS ON TOP" IsCheckable="True" Style="{StaticResource HudMenuItem}" Click="Topmost_Click" />
+            <MenuItem x:Name="AutostartItem" Header="START WITH WINDOWS" IsCheckable="True" Style="{StaticResource HudMenuItem}" Click="Autostart_Click" />
+            <Separator Style="{StaticResource HudSeparator}" />
+            <MenuItem Header="HIDE TO TRAY" Style="{StaticResource HudMenuItem}" Click="Hide_Click" />
+            <MenuItem Header="EXIT" Style="{StaticResource HudMenuItem}" Click="Exit_Click" />
+        </ContextMenu>
+    </Window.ContextMenu>
+
+    <Grid Margin="14" MouseLeftButtonDown="Panel_MouseLeftButtonDown" SizeChanged="Panel_SizeChanged">
+        <!-- chamfered HUD panel with glow. The shapes sit in canvases so they never dictate the panel size;
+             their geometry follows the content height (Panel_SizeChanged). -->
+        <Canvas>
+            <Path x:Name="PanelShape"
+                  Fill="{StaticResource PanelBrush}"
+                  Stroke="{Binding State, Converter={StaticResource StateBrush}}" StrokeThickness="1.5">
+                <Path.Effect>
+                    <DropShadowEffect Color="{Binding State, Converter={StaticResource StateBrush}}" BlurRadius="14" ShadowDepth="0" Opacity="0.75" />
+                </Path.Effect>
+            </Path>
+        </Canvas>
+        <Rectangle Fill="{StaticResource ScanlineBrush}" Opacity="0.05" IsHitTestVisible="False"
+                   Clip="{Binding Data, ElementName=PanelShape}" />
+        <!-- corner accents -->
+        <Canvas IsHitTestVisible="False">
+            <Path Data="M 0,34 L 0,20 L 20,0 L 60,0" Stroke="{StaticResource AccentBrush}" StrokeThickness="3" />
+            <Path x:Name="CornerAccent" Stroke="{StaticResource AccentBrush}" StrokeThickness="3" />
+        </Canvas>
+
+        <!-- ================= STATUS VIEW ================= -->
+        <Grid x:Name="StatusView" Margin="20,14,20,18">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <DockPanel Grid.Row="0">
+                <Button DockPanel.Dock="Right" Style="{StaticResource HudIconButton}" Content="&#xE713;" ToolTip="Settings" Click="OpenSettings_Click" />
+                <TextBlock Style="{StaticResource HudLabel}" Text="UNSC // ILO LINK" VerticalAlignment="Center" Margin="14,0,0,0" />
+            </DockPanel>
+
+            <c:ShieldBar Grid.Row="1" Height="12" Margin="0,8,0,0"
+                         Level="{Binding ShieldLevel}"
+                         Accent="{Binding State, Converter={StaticResource StateBrush}}" />
+
+            <Viewbox Grid.Row="2" StretchDirection="DownOnly" Height="40" Margin="0,10,0,0" HorizontalAlignment="Left">
+                <TextBlock Text="{Binding Label}" FontFamily="{StaticResource HudFont}" FontSize="30" FontWeight="SemiBold"
+                           Foreground="{Binding State, Converter={StaticResource StateBrush}}">
+                    <TextBlock.Effect>
+                        <DropShadowEffect Color="{Binding State, Converter={StaticResource StateBrush}}" BlurRadius="10" ShadowDepth="0" Opacity="0.6" />
+                    </TextBlock.Effect>
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsTransitioning}" Value="True">
+                                    <DataTrigger.EnterActions>
+                                        <BeginStoryboard x:Name="Pulse">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetProperty="Opacity" From="1" To="0.35" Duration="0:0:0.8" AutoReverse="True" RepeatBehavior="Forever" />
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </DataTrigger.EnterActions>
+                                    <DataTrigger.ExitActions>
+                                        <StopStoryboard BeginStoryboardName="Pulse" />
+                                    </DataTrigger.ExitActions>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Viewbox>
+
+            <TextBlock Grid.Row="3" Style="{StaticResource HudLabel}" Text="{Binding Detail}" TextWrapping="Wrap" MaxHeight="28" />
+
+            <c:PowerButton x:Name="Power" Grid.Row="4" Width="156" Height="156" Margin="0,6,0,2"
+                           IsEnabled="{Binding CanUsePower}"
+                           Accent="{Binding State, Converter={StaticResource StateBrush}}"
+                           Activated="Power_Activated"
+                           ToolTip="{Binding PowerTip}">
+                <c:PowerButton.Style>
+                    <Style TargetType="c:PowerButton">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding State}" Value="{x:Static m:HudState.Online}">
+                                <Setter Property="IsLit" Value="True" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsTransitioning}" Value="True">
+                                <Setter Property="IsLit" Value="True" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </c:PowerButton.Style>
+                <c:PowerButton.Effect>
+                    <DropShadowEffect Color="{Binding State, Converter={StaticResource StateBrush}}" BlurRadius="18" ShadowDepth="0" Opacity="0.55" />
+                </c:PowerButton.Effect>
+            </c:PowerButton>
+
+            <TextBlock x:Name="PowerHintText" Grid.Row="5" Style="{StaticResource HudText}" Text="{Binding PowerHint}" HorizontalAlignment="Center"
+                       Foreground="{Binding State, Converter={StaticResource StateBrush}}" Margin="0,0,0,8" />
+
+            <!-- takes the place of the hint after the power button was held on a running server -->
+            <StackPanel x:Name="ConfirmPanel" Grid.Row="5" Visibility="Collapsed" Margin="0,0,0,10">
+                <TextBlock Style="{StaticResource HudText}" Text="CONFIRM SHUTDOWN?" HorizontalAlignment="Center"
+                           Foreground="{StaticResource OrangeBrush}" Margin="0,0,0,6" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="8" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" Style="{StaticResource HudWarnButton}" Content="SHUT DOWN" Click="ConfirmShutdown_Click"
+                            ToolTip="Press the server's power button: the operating system shuts down gracefully" />
+                    <Button x:Name="CancelShutdownButton" Grid.Column="2" Style="{StaticResource HudButton}" Content="CANCEL"
+                            Click="CancelShutdown_Click" />
+                </Grid>
+            </StackPanel>
+
+            <!-- info rows; which ones show is chosen in the display view -->
+            <StackPanel Grid.Row="6">
+                <DockPanel Height="18" Visibility="{Binding Settings.ShowModel, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Width="92" Style="{StaticResource HudLabel}" Text="MODEL" />
+                    <TextBlock Style="{StaticResource HudText}" Text="{Binding Model}" />
+                </DockPanel>
+                <DockPanel Height="18" Visibility="{Binding Settings.ShowHostName, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Width="92" Style="{StaticResource HudLabel}" Text="HOST NAME" />
+                    <TextBlock Style="{StaticResource HudText}" Text="{Binding HostName}" />
+                </DockPanel>
+                <DockPanel Height="18" Visibility="{Binding Settings.ShowAddress, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Width="92" Style="{StaticResource HudLabel}" Text="ILO ADDRESS" />
+                    <TextBlock Style="{StaticResource HudText}" Text="{Binding Host}" />
+                </DockPanel>
+                <DockPanel Height="18" Visibility="{Binding Settings.ShowHealth, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Width="92" Style="{StaticResource HudLabel}" Text="HEALTH" />
+                    <TextBlock Text="{Binding Health}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource HudText}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HealthBad}" Value="True">
+                                        <Setter Property="Foreground" Value="{StaticResource AmberBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </DockPanel>
+                <DockPanel Height="18" Visibility="{Binding Settings.ShowPostState, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Width="92" Style="{StaticResource HudLabel}" Text="POST STATE" />
+                    <TextBlock Style="{StaticResource HudText}" Text="{Binding PostState}" />
+                </DockPanel>
+                <DockPanel Height="18" Visibility="{Binding Settings.ShowCpu, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Width="92" Style="{StaticResource HudLabel}" Text="CPU" />
+                    <TextBlock Style="{StaticResource HudText}" Text="{Binding Cpu}" ToolTip="{Binding Cpu}" />
+                </DockPanel>
+                <DockPanel Height="18" Visibility="{Binding Settings.ShowMemory, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Width="92" Style="{StaticResource HudLabel}" Text="MEMORY" />
+                    <TextBlock Style="{StaticResource HudText}" Text="{Binding Memory}" />
+                </DockPanel>
+                <DockPanel Height="18" Visibility="{Binding Settings.ShowTemperatures, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Width="92" Style="{StaticResource HudLabel}" Text="TEMPERATURE" />
+                    <TextBlock Style="{StaticResource HudText}" Text="{Binding Temperature}" />
+                </DockPanel>
+                <DockPanel Height="18" Visibility="{Binding Settings.ShowFans, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Width="92" Style="{StaticResource HudLabel}" Text="FANS" />
+                    <TextBlock Style="{StaticResource HudText}" Text="{Binding Fans}" />
+                </DockPanel>
+                <DockPanel Height="18" Visibility="{Binding Settings.ShowBios, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Width="92" Style="{StaticResource HudLabel}" Text="BIOS" />
+                    <TextBlock Style="{StaticResource HudText}" Text="{Binding Bios}" />
+                </DockPanel>
+                <DockPanel Height="18" Visibility="{Binding Settings.ShowLastContact, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Width="92" Style="{StaticResource HudLabel}" Text="LAST CONTACT" />
+                    <TextBlock Style="{StaticResource HudText}" Text="{Binding LastContact}" />
+                </DockPanel>
+            </StackPanel>
+
+            <Button Grid.Row="7" Style="{StaticResource HudButton}" Content="REMOTE CONSOLE" Margin="0,12,0,0"
+                    IsEnabled="{Binding CanOpenConsole}" Click="OpenConsole_Click"
+                    ToolTip="Open the iLO HTML5 remote console" />
+        </Grid>
+
+        <!-- ================= DISPLAY VIEW ================= -->
+        <StackPanel x:Name="DisplayView" Margin="20,14,20,18" Visibility="Collapsed">
+            <TextBlock Style="{StaticResource HudLabel}" Text="UNSC // DISPLAY CONFIGURATION" Margin="14,4,0,12" />
+            <TextBlock Style="{StaticResource HudLabel}" Text="ROWS SHOWN ON THE WIDGET" Margin="0,0,0,8" />
+
+            <UniformGrid Columns="2">
+                <CheckBox x:Name="ShowModelBox" Style="{StaticResource HudCheckBox}" Content="MODEL" Margin="0,0,0,8" />
+                <CheckBox x:Name="ShowHostNameBox" Style="{StaticResource HudCheckBox}" Content="HOST NAME" Margin="0,0,0,8" />
+                <CheckBox x:Name="ShowAddressBox" Style="{StaticResource HudCheckBox}" Content="ILO ADDRESS" Margin="0,0,0,8" />
+                <CheckBox x:Name="ShowHealthBox" Style="{StaticResource HudCheckBox}" Content="HEALTH" Margin="0,0,0,8" />
+                <CheckBox x:Name="ShowPostStateBox" Style="{StaticResource HudCheckBox}" Content="POST STATE" Margin="0,0,0,8" />
+                <CheckBox x:Name="ShowCpuBox" Style="{StaticResource HudCheckBox}" Content="CPU" Margin="0,0,0,8" />
+                <CheckBox x:Name="ShowMemoryBox" Style="{StaticResource HudCheckBox}" Content="MEMORY" Margin="0,0,0,8" />
+                <CheckBox x:Name="ShowTemperaturesBox" Style="{StaticResource HudCheckBox}" Content="TEMPERATURE" Margin="0,0,0,8" />
+                <CheckBox x:Name="ShowFansBox" Style="{StaticResource HudCheckBox}" Content="FANS" Margin="0,0,0,8" />
+                <CheckBox x:Name="ShowBiosBox" Style="{StaticResource HudCheckBox}" Content="BIOS" Margin="0,0,0,8" />
+                <CheckBox x:Name="ShowLastContactBox" Style="{StaticResource HudCheckBox}" Content="LAST CONTACT" Margin="0,0,0,8" />
+            </UniformGrid>
+
+            <TextBlock x:Name="DisplayResult" Style="{StaticResource HudLabel}" TextWrapping="Wrap" Margin="0,4,0,14"
+                       Text="TEMPERATURE AND FANS ADD ONE ILO REQUEST PER POLL" />
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="8" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" Style="{StaticResource HudButton}" Content="SAVE" Click="SaveDisplay_Click" />
+                <Button Grid.Column="2" Style="{StaticResource HudButton}" Content="CANCEL" Click="CancelDisplay_Click" />
+            </Grid>
+        </StackPanel>
+
+        <!-- ================= SETTINGS VIEW ================= -->
+        <Grid x:Name="SettingsView" Margin="20,14,20,18" Height="452" Visibility="Collapsed">
+            <StackPanel>
+                <TextBlock Style="{StaticResource HudLabel}" Text="UNSC // LINK CONFIGURATION" Margin="14,4,0,12" />
+
+                <TextBlock Style="{StaticResource HudLabel}" Text="ILO ADDRESS (IP OR HOST NAME)" Margin="0,0,0,3" />
+                <TextBox x:Name="HostBox" Style="{StaticResource HudTextBox}" />
+
+                <TextBlock Style="{StaticResource HudLabel}" Text="USER" Margin="0,10,0,3" />
+                <TextBox x:Name="UserBox" Style="{StaticResource HudTextBox}" />
+
+                <TextBlock x:Name="PasswordLabel" Style="{StaticResource HudLabel}" Text="PASSWORD" Margin="0,10,0,3" />
+                <PasswordBox x:Name="PasswordInput" Style="{StaticResource HudPasswordBox}" />
+
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                    <TextBlock Style="{StaticResource HudLabel}" Text="POLL INTERVAL (S)" VerticalAlignment="Center" Margin="0,0,10,0" />
+                    <TextBox x:Name="PollBox" Style="{StaticResource HudTextBox}" Width="60" MaxLength="4" />
+                </StackPanel>
+
+                <CheckBox x:Name="SelfSignedBox" Style="{StaticResource HudCheckBox}" Content="ACCEPT SELF-SIGNED CERTIFICATE" Margin="0,14,0,0"
+                          ToolTip="iLO ships with a self-signed certificate. Enable only on a network you trust." />
+                <CheckBox x:Name="TopmostBox" Style="{StaticResource HudCheckBox}" Content="ALWAYS ON TOP" Margin="0,8,0,0" />
+                <CheckBox x:Name="AutostartBox" Style="{StaticResource HudCheckBox}" Content="START WITH WINDOWS" Margin="0,8,0,0" />
+
+                <TextBlock x:Name="SettingsResult" Style="{StaticResource HudLabel}" TextWrapping="Wrap" Height="30" Margin="0,12,0,0" />
+            </StackPanel>
+
+            <Grid VerticalAlignment="Bottom">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="8" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="8" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button x:Name="TestButton" Grid.Column="0" Style="{StaticResource HudButton}" Content="TEST LINK" Click="TestLink_Click" />
+                <Button Grid.Column="2" Style="{StaticResource HudButton}" Content="SAVE" Click="SaveSettings_Click" IsDefault="True" />
+                <Button Grid.Column="4" Style="{StaticResource HudButton}" Content="CANCEL" Click="CancelSettings_Click" IsCancel="True" />
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>
